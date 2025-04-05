@@ -11,77 +11,127 @@
             padding: 0;
             height: 100%;
             width: 100%;
+            font-family: sans-serif;
+            background-color: #111;
+            color: #fff;
+        }
+        #title {
+            background: linear-gradient(to right, #222, #000);
+            color: #00ffff;
+            text-align: center;
+            padding: 20px;
+            font-size: 2em;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.7);
+            border-bottom: 3px solid #00ffff;
+            letter-spacing: 1px;
         }
         #dashboard {
             display: grid;
-            grid-template-columns: 70% 30%;
-            height: 100vh;
-            width: 100vw;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            background-color: #1a1a1a;
+        }
+        .map-container, .cloud-container {
+            background-color: #1b1b1b;
+            padding: 10px;
+            border-radius: 8px;
+            position: relative;
         }
         #map, #wordcloud {
-            height: 100%;
+            height: 300px;
             width: 100%;
         }
-        #wordcloud {
-            background: #f7f7f7;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        .chart-container {
+            padding: 10px;
+            background-color: #1a1a1a;
         }
         canvas {
             width: 100% !important;
-            height: 100% !important;
+            height: 220px !important;
+            background-color: #1b1b1b;
+            border-radius: 8px;
+        }
+        .legend {
+            background: rgba(17, 17, 17, 0.8);
+            padding: 4px 8px;
+            font-size: 9px;
+            line-height: 16px;
+            color: #fff;
+            border-radius: 4px;
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+        h3.section-title {
+            text-align: center;
+            margin-top: 0;
         }
     </style>
 </head>
 <body>
+    <div id="title">Darknet Cocaine Market Dashboard</div>
     <div id="dashboard">
-        <div id="map"></div>
-        <div id="wordcloud"></div>
+        <div class="map-container">
+            <h3 class="section-title">Transaction Heat Map</h3>
+            <div id="map"></div>
+        </div>
+        <div class="cloud-container">
+            <h3 class="section-title">Most Frequent Keywords</h3>
+            <div id="wordcloud"></div>
+        </div>
+    </div>
+    <div class="chart-container">
+        <div style="display: flex; gap: 10px;">
+            <div style="flex: 1;">
+                <h3 class="section-title">Quality % Histogram</h3>
+                <canvas id="qualityChart"></canvas>
+            </div>
+            <div style="flex: 1;">
+                <h3 class="section-title">USD Price vs. Purity</h3>
+                <canvas id="scatterPlot"></canvas>
+            </div>
+        </div>
     </div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+
     <script>
         const map = L.map('map', {
-            worldCopyJump: false,
-            zoomSnap: 0.1,
-            zoomControl: true
+            center: [-15.78, -47.93],
+            zoom: 2,
+            minZoom: 2,
+            maxZoom: 2,
+            zoomControl: false,
+            scrollWheelZoom: false,
+            doubleClickZoom: false,
+            boxZoom: false,
+            keyboard: false,
+            dragging: true
         });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 18,
-            attribution: '&copy; OpenStreetMap contributors',
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors & CartoDB',
             noWrap: true
         }).addTo(map);
 
-        function getColor(d) {
-            return d > 200000 ? '#ff0000' :
-                   d > 100000 ? '#ff4500' :
-                   d > 50000  ? '#ff8c00' :
-                   d > 10000  ? '#ffa500' :
-                   d > 1000   ? '#ffd700' :
-                   d > 100    ? '#adff2f' :
-                   d > 10     ? '#006400' :
-                   d > 0      ? '#00ff00' :
-                                '#ffffff';
-        }
-
-        function style(feature) {
-            const code = (feature.id || '').toUpperCase();
-            const tx = txMap[code] || 0;
-            return {
-                fillColor: getColor(tx),
-                weight: 1,
-                opacity: 1,
-                color: 'white',
-                fillOpacity: 0.9
-            };
-        }
+        const getColor = d => d > 200000 ? '#ff0000' : d > 100000 ? '#ff4500' : d > 50000 ? '#ff8c00' :
+                            d > 10000 ? '#ffa500' : d > 1000 ? '#ffd700' : d > 100 ? '#adff2f' :
+                            d > 10 ? '#006400' : d > 0 ? '#00ff00' : '#ffffff';
 
         const iso2to3 = {
-            'AU': 'AUS', 'BE': 'BEL', 'BR': 'BRA', 'CA': 'CAN', 'CH': 'CHE',
-            'CN': 'CHN', 'CZ': 'CZE', 'DE': 'DEU', 'ES': 'ESP', 'FR': 'FRA',
-            'GB': 'GBR', 'IE': 'IRL', 'IT': 'ITA', 'NL': 'NLD', 'NZ': 'NZL',
-            'SE': 'SWE', 'US': 'USA', 'WW': 'USA', 'EU': 'FRA', 'N. AMERICA': 'USA'
+            'AU': 'AUS', 'BE': 'BEL', 'BR': 'BRA', 'CA': 'CAN', 'CH': 'CHE', 'CN': 'CHN',
+            'CZ': 'CZE', 'DE': 'DEU', 'ES': 'ESP', 'FR': 'FRA', 'GB': 'GBR', 'IE': 'IRL',
+            'IT': 'ITA', 'NL': 'NLD', 'NZ': 'NZL', 'SE': 'SWE', 'US': 'USA',
+            'WW': 'USA', 'EU': 'FRA', 'N. AMERICA': 'USA'
         };
 
         let txMap = {};
@@ -94,35 +144,29 @@
             data.transactions.forEach(tx => {
                 const rawCode = tx.country.trim().toUpperCase();
                 const iso3 = iso2to3[rawCode];
-                if (iso3) {
-                    txMap[iso3] = (txMap[iso3] || 0) + tx.tx;
-                }
+                if (iso3) txMap[iso3] = (txMap[iso3] || 0) + tx.tx;
             });
-
-            if (choroplethLayer) map.removeLayer(choroplethLayer);
 
             choroplethLayer = L.geoJson(geojson, {
-                style: style,
-                onEachFeature: function (feature, layer) {
+                style: feature => ({
+                    fillColor: getColor(txMap[feature.id.toUpperCase()] || 0),
+                    weight: 1,
+                    color: 'white',
+                    fillOpacity: 0.9
+                }),
+                onEachFeature: (feature, layer) => {
                     const code = (feature.id || '').toUpperCase();
-                    const tx = txMap[code] || 0;
-                    layer.bindPopup(`${feature.properties.name}: ${tx} transactions`);
+                    layer.bindPopup(`${feature.properties.name}: ${txMap[code] || 0} transactions`);
                 }
-            });
+            }).addTo(map);
 
-            choroplethLayer.addTo(map);
-            map.fitBounds(choroplethLayer.getBounds(), { padding: [0, 0] });
-
-            const legend = L.control({position: 'bottomright'});
-            legend.onAdd = function (map) {
+            const legend = L.control({ position: 'topleft' });
+            legend.onAdd = function () {
                 const div = L.DomUtil.create('div', 'legend');
                 const grades = [0, 1, 10, 100, 1000, 10000, 50000, 100000, 200000];
-
-                for (let i = 0; i < grades.length; i++) {
-                    div.innerHTML +=
-                        '<i style="background:' + getColor(grades[i]) + '"></i> ' +
-                        grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
-                }
+                grades.forEach((g, i) => {
+                    div.innerHTML += `<i style="background:${getColor(g)}"></i> ${g}${grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+'}`;
+                });
                 return div;
             };
             legend.addTo(map);
@@ -132,15 +176,62 @@
             .then(res => res.json())
             .then(words => {
                 WordCloud(document.getElementById('wordcloud'), {
-                    list: words.slice(0, 75),  // ✅ show top 75 only
-                    gridSize: 8,               // ✅ increase grid size = fewer words, faster render
-                    weightFactor: function (size) {
-                        return Math.pow(size, 1.1);  // ✅ reduce visual weight
-                    },
+                    list: words.slice(0, 75),
+                    gridSize: 8,
+                    weightFactor: size => Math.pow(size, 1.1),
                     fontFamily: 'Times, serif',
                     color: 'random-dark',
                     rotateRatio: 0.5,
                     backgroundColor: 'transparent'
+                });
+            });
+
+        new Chart(document.getElementById('qualityChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['50%', '65%', '70%', '75%', '80%', '85%', '90%', '95%', '100%'],
+                datasets: [{
+                    label: 'Samples',
+                    data: [10, 37, 8, 37, 142, 256, 960, 41, 13],
+                    backgroundColor: '#4169E1',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    datalabels: {
+                        color: 'white', anchor: 'end', align: 'top', font: { weight: 'bold', size: 14 }, formatter: Math.round
+                    },
+                    legend: { display: false },
+                    title: { display: true, color: '#fff', font: { size: 18 } }
+                },
+                scales: {
+                    x: { ticks: { color: '#fff' } },
+                    y: { ticks: { color: '#fff' } }
+                }
+            },
+            plugins: [ChartDataLabels]
+        });
+
+        fetch('/scatter-data')
+            .then(res => res.json())
+            .then(data => {
+                new Chart(document.getElementById('scatterPlot').getContext('2d'), {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{ label: 'USD Price vs. Purity', data: data, backgroundColor: '#32CD32' }]
+                    },
+                    options: {
+                        plugins: {
+                            title: { display: true, color: '#fff', font: { size: 18 } },
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { title: { display: true, text: 'Purity (%)', color: '#fff' }, ticks: { color: '#fff' } },
+                            y: { title: { display: true, text: 'USD Price', color: '#fff' }, ticks: { color: '#fff' } }
+                        }
+                    }
                 });
             });
     </script>

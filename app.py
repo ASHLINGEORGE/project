@@ -36,7 +36,7 @@ def ship_data():
     country_tx = defaultdict(int)
 
     for _, row in df.iterrows():
-        origin = str(row['ships_from']).strip().upper()
+        origin = str(row['ships_from_to']).split('→')[0].strip().upper()
         tx_count = int(row['successful_transactions']) if not pd.isna(row['successful_transactions']) else 0
         origin_mapped = COUNTRY_REMAP.get(origin, origin)
         if origin_mapped in COUNTRY_COORDS:
@@ -47,26 +47,10 @@ def ship_data():
     ]
     return jsonify({"transactions": tx_list})
 
-@app.route('/vendor-ratings')
-def vendor_ratings():
-    df = pd.read_csv('data/cleaned_dataset.csv')
-    rating_df = df.groupby('vendor_name')['rating'].mean().reset_index().sort_values(by='rating', ascending=False)
-    fig = px.bar(rating_df, x='vendor_name', y='rating', title='Average Vendor Ratings')
-    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-
-@app.route('/generate-wordcloud')
-def generate_wordcloud():
-    df = pd.read_csv('data/cleaned_dataset.csv')
-    text = ' '.join(df['product_title'].dropna()).lower()
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(text)
-    path = 'static/wordcloud.png'
-    wordcloud.to_file(path)
-    return jsonify({'wordcloud_image': path})
-
 @app.route('/title_words')
 def title_words():
     df = pd.read_csv('data/cleaned_dataset.csv')
-    df = df[df['successful_transactions'].fillna(0).astype(int) > 0]  # ✅ filter only successful ones
+    df = df[df['successful_transactions'].fillna(0).astype(int) > 0]
     titles = df['product_title'].dropna().astype(str).str.lower()
     words = []
 
@@ -77,6 +61,25 @@ def title_words():
 
     freq = Counter(words).most_common(50)
     return jsonify(freq)
+
+@app.route('/quality-distribution')
+def quality_distribution():
+    df = pd.read_csv('data/cleaned_dataset.csv')
+    df = df[df['quality'].notna()]
+    bins = [50, 65, 70, 75, 80, 85, 90, 95, 100]
+    counts = [((df['quality'] == b).sum()) for b in bins]
+    labels = [f"{b}%" for b in bins]
+    return jsonify({'labels': labels, 'counts': counts})
+
+@app.route('/scatter-data')
+def scatter_data():
+    df = pd.read_csv('data/cleaned_dataset.csv')
+    df = df[df['quality'].notna() & df['usd_price'].notna()]
+    points = [
+        {"x": row['quality'], "y": row['usd_price']}
+        for _, row in df.iterrows()
+    ]
+    return jsonify(points)
 
 @app.route('/static/<path:filename>')
 def serve_file(filename):
