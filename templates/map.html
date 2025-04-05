@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Ship Choropleth Map</title>
+    <title>Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
@@ -11,44 +11,35 @@
             padding: 0;
             height: 100%;
             width: 100%;
-            overflow: hidden;
         }
-        #map {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
+        #dashboard {
+            display: grid;
+            grid-template-columns: 70% 30%;
+            height: 100vh;
+            width: 100vw;
         }
-        .legend {
-            background: white;
-            line-height: 1.5;
-            padding: 10px 16px;
-            border-radius: 5px;
-            font-size: 25px;
-            box-shadow: 0 0 6px rgba(0,0,0,0.3);
-        }
-        .legend i {
-            width: 20px;
-            height: 20px;
-            float: left;
-            margin-right: 8px;
-            opacity: 0.8;
-        }
-        #ratings-chart {
-            margin-top: 20px;
+        #map, #wordcloud {
+            height: 100%;
             width: 100%;
-            height: 400px;
+        }
+        #wordcloud {
+            background: #f7f7f7;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        }
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
         }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-
-    <div id="ratings-chart"></div>
+    <div id="dashboard">
+        <div id="map"></div>
+        <div id="wordcloud"></div>
+    </div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.min.js"></script>
     <script>
         const map = L.map('map', {
             worldCopyJump: false,
@@ -137,12 +128,20 @@
             legend.addTo(map);
         });
 
-        // Fetch the vendor ratings and plot
-        fetch('/vendor-ratings')
+        fetch('/title_words')
             .then(res => res.json())
-            .then(ratingsChartData => {
-                const ratingsChart = JSON.parse(ratingsChartData);
-                Plotly.newPlot('ratings-chart', ratingsChart.data, ratingsChart.layout);
+            .then(words => {
+                WordCloud(document.getElementById('wordcloud'), {
+                    list: words.slice(0, 75),  // ✅ show top 75 only
+                    gridSize: 8,               // ✅ increase grid size = fewer words, faster render
+                    weightFactor: function (size) {
+                        return Math.pow(size, 1.1);  // ✅ reduce visual weight
+                    },
+                    fontFamily: 'Times, serif',
+                    color: 'random-dark',
+                    rotateRatio: 0.5,
+                    backgroundColor: 'transparent'
+                });
             });
     </script>
 </body>
