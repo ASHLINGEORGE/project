@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Ship Choropleth Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }
+        .legend {
+            background: white;
+            line-height: 1.5;
+            padding: 10px 16px;
+            border-radius: 5px;
+            font-size: 25px;
+            box-shadow: 0 0 6px rgba(0,0,0,0.3);
+        }
+        .legend i {
+            width: 20px;
+            height: 20px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.8;
+        }
+        #ratings-chart {
+            margin-top: 20px;
+            width: 100%;
+            height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div id="ratings-chart"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        const map = L.map('map', {
+            worldCopyJump: false,
+            zoomSnap: 0.1,
+            zoomControl: true
+        });
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+            attribution: '&copy; OpenStreetMap contributors',
+            noWrap: true
+        }).addTo(map);
+
+        function getColor(d) {
+            return d > 200000 ? '#ff0000' :
+                   d > 100000 ? '#ff4500' :
+                   d > 50000  ? '#ff8c00' :
+                   d > 10000  ? '#ffa500' :
+                   d > 1000   ? '#ffd700' :
+                   d > 100    ? '#adff2f' :
+                   d > 10     ? '#006400' :
+                   d > 0      ? '#00ff00' :
+                                '#ffffff';
+        }
+
+        function style(feature) {
+            const code = (feature.id || '').toUpperCase();
+            const tx = txMap[code] || 0;
+            return {
+                fillColor: getColor(tx),
+                weight: 1,
+                opacity: 1,
+                color: 'white',
+                fillOpacity: 0.9
+            };
+        }
+
+        const iso2to3 = {
+            'AU': 'AUS', 'BE': 'BEL', 'BR': 'BRA', 'CA': 'CAN', 'CH': 'CHE',
+            'CN': 'CHN', 'CZ': 'CZE', 'DE': 'DEU', 'ES': 'ESP', 'FR': 'FRA',
+            'GB': 'GBR', 'IE': 'IRL', 'IT': 'ITA', 'NL': 'NLD', 'NZ': 'NZL',
+            'SE': 'SWE', 'US': 'USA', 'WW': 'USA', 'EU': 'FRA', 'N. AMERICA': 'USA'
+        };
+
+        let txMap = {};
+        let choroplethLayer;
+
+        Promise.all([
+            fetch('/data').then(res => res.json()),
+            fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json').then(res => res.json())
+        ]).then(([data, geojson]) => {
+            data.transactions.forEach(tx => {
+                const rawCode = tx.country.trim().toUpperCase();
+                const iso3 = iso2to3[rawCode];
+                if (iso3) {
+                    txMap[iso3] = (txMap[iso3] || 0) + tx.tx;
+                }
+            });
+
+            if (choroplethLayer) map.removeLayer(choroplethLayer);
+
+            choroplethLayer = L.geoJson(geojson, {
+                style: style,
+                onEachFeature: function (feature, layer) {
+                    const code = (feature.id || '').toUpperCase();
+                    const tx = txMap[code] || 0;
+                    layer.bindPopup(`${feature.properties.name}: ${tx} transactions`);
+                }
+            });
+
+            choroplethLayer.addTo(map);
+            map.fitBounds(choroplethLayer.getBounds(), { padding: [0, 0] });
+
+            const legend = L.control({position: 'bottomright'});
+            legend.onAdd = function (map) {
+                const div = L.DomUtil.create('div', 'legend');
+                const grades = [0, 1, 10, 100, 1000, 10000, 50000, 100000, 200000];
+
+                for (let i = 0; i < grades.length; i++) {
+                    div.innerHTML +=
+                        '<i style="background:' + getColor(grades[i]) + '"></i> ' +
+                        grades[i] + (grades[i + 1] ? '&ndash;' + grades[i + 1] + '<br>' : '+');
+                }
+                return div;
+            };
+            legend.addTo(map);
+        });
+
+        // Fetch the vendor ratings and plot
+        fetch('/vendor-ratings')
+            .then(res => res.json())
+            .then(ratingsChartData => {
+                const ratingsChart = JSON.parse(ratingsChartData);
+                Plotly.newPlot('ratings-chart', ratingsChart.data, ratingsChart.layout);
+            });
+    </script>
+</body>
+</html>
